@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Call</title>
+    <style>
+        #video-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .video-box {
+            width: 300px;
+            height: 200px;
+            background-color: #000;
+        }
+        button {
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Multi-Person Video Call</h1>
+    <div id="video-container"></div>
+    <button id="join">Join</button>
+    <button id="leave" disabled>Leave</button>
+
+    <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.14.0.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
