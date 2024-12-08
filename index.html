@@ -1,32 +1,162 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Call</title>
-    <style>
-        #video-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        .video-box {
-            width: 300px;
-            height: 200px;
-            background-color: #000;
-        }
-        button {
-            margin: 10px;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video Call</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.14.0.js"></script>
 </head>
-<body>
-    <h1>Multi-Person Video Call</h1>
-    <div id="video-container"></div>
-    <button id="join">Join</button>
-    <button id="leave" disabled>Leave</button>
+<body class="bg-gray-100">
 
-    <script src="https://cdn.agora.io/sdk/release/AgoraRTC_N-4.14.0.js"></script>
-    <script src="app.js"></script>
+  <div class="container mx-auto mt-10">
+    <h1 class="text-2xl font-bold text-center mb-6">Video Call App</h1>
+
+    <!-- Control Panel -->
+    <div class="flex justify-center gap-4 mb-6">
+      <button id="join" class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600">
+        <i class="fas fa-sign-in-alt"></i> Join
+      </button>
+      <button id="leave" class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600" disabled>
+        <i class="fas fa-sign-out-alt"></i> Leave
+      </button>
+    </div>
+
+    <!-- Video Container -->
+    <div id="video-container" class="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <!-- Video cards will be dynamically added here -->
+    </div>
+  </div>
+
+  <script>
+    const APP_ID = 'YOUR_APP_ID'; // Replace with your Agora App ID
+    const CHANNEL = 'test'; // Replace with your channel name
+    const TOKEN = null; // Replace with your token if using authentication
+
+    let client;
+    let localTracks = { audioTrack: null, videoTrack: null };
+    let remoteUsers = {};
+
+    const joinBtn = document.getElementById('join');
+    const leaveBtn = document.getElementById('leave');
+    const videoContainer = document.getElementById('video-container');
+
+    // Utility to create a participant card
+    function createVideoCard(userId, isLocal = false) {
+      const card = document.createElement('div');
+      card.id = `user-${userId}`;
+      card.className = 'relative border bg-white rounded-lg shadow-md p-2 flex flex-col items-center';
+
+      card.innerHTML = `
+        <div class="video-box bg-black rounded-lg w-full h-40 flex items-center justify-center">
+          <div id="video-${userId}" class="w-full h-full"></div>
+        </div>
+        <div class="mt-2 text-center">
+          <h3 class="font-bold">${isLocal ? 'You' : `User ${userId}`}</h3>
+        </div>
+        <div class="flex gap-2 mt-2">
+          <button id="mic-${userId}" class="mic-toggle bg-gray-200 p-2 rounded-full hover:bg-gray-300">
+            <i class="fas fa-microphone"></i>
+          </button>
+          <button id="video-${userId}-toggle" class="video-toggle bg-gray-200 p-2 rounded-full hover:bg-gray-300">
+            <i class="fas fa-video"></i>
+          </button>
+        </div>
+      `;
+      videoContainer.appendChild(card);
+    }
+
+    // Toggle audio or video
+    function toggleTrack(trackType, userId) {
+      const track = localTracks[trackType];
+      const button = document.getElementById(`${trackType}-${userId}`);
+
+      if (track.isMuted) {
+        track.setMuted(false);
+        button.innerHTML = `<i class="fas fa-${trackType === 'audioTrack' ? 'microphone' : 'video'}"></i>`;
+      } else {
+        track.setMuted(true);
+        button.innerHTML = `<i class="fas fa-${trackType === 'audioTrack' ? 'microphone-slash' : 'video-slash'}"></i>`;
+      }
+    }
+
+    // Initialize Agora Client
+    async function initializeAgora() {
+      client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+
+      // Handle new user joining
+      client.on('user-published', async (user, mediaType) => {
+        await client.subscribe(user, mediaType);
+
+        if (!remoteUsers[user.uid]) {
+          remoteUsers[user.uid] = user;
+          createVideoCard(user.uid);
+        }
+
+        if (mediaType === 'video') {
+          const videoTrack = user.videoTrack;
+          videoTrack.play(`video-${user.uid}`);
+        } else if (mediaType === 'audio') {
+          const audioTrack = user.audioTrack;
+          audioTrack.play();
+        }
+      });
+
+      // Handle user leaving
+      client.on('user-unpublished', (user) => {
+        if (remoteUsers[user.uid]) {
+          delete remoteUsers[user.uid];
+          const card = document.getElementById(`user-${user.uid}`);
+          if (card) card.remove();
+        }
+      });
+
+      await client.join(APP_ID, CHANNEL, TOKEN, null);
+
+      // Create and publish local tracks
+      localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+      localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack();
+
+      createVideoCard('local', true);
+      localTracks.videoTrack.play('video-local');
+
+      await client.publish(Object.values(localTracks));
+    }
+
+    // Join button click
+    joinBtn.addEventListener('click', async () => {
+      joinBtn.disabled = true;
+      leaveBtn.disabled = false;
+      await initializeAgora();
+    });
+
+    // Leave button click
+    leaveBtn.addEventListener('click', async () => {
+      leaveBtn.disabled = true;
+      joinBtn.disabled = false;
+
+      for (let trackName in localTracks) {
+        if (localTracks[trackName]) {
+          localTracks[trackName].stop();
+          localTracks[trackName].close();
+        }
+      }
+      localTracks = { audioTrack: null, videoTrack: null };
+
+      await client.leave();
+      videoContainer.innerHTML = '';
+    });
+
+    // Handle audio/video toggle
+    videoContainer.addEventListener('click', (event) => {
+      const target = event.target.closest('button');
+      if (!target) return;
+
+      const [trackType, userId] = target.id.split('-');
+      if (userId === 'local') toggleTrack(trackType, userId);
+    });
+  </script>
 </body>
-</html>
+    </html>
+    
